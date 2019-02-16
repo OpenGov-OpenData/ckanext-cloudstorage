@@ -82,6 +82,11 @@ class CloudStorage(object):
         )
 
     @property
+    def parent_directory_name(self):
+	return config.get('ckanext.cloudstorage.parent_dir_name', '')
+        #return config['ckanext.cloudstorage.parent_dir_name']
+
+    @property
     def leave_files(self):
         """
         `True` if ckanext-cloudstorage is configured to leave files on the
@@ -193,8 +198,10 @@ class ResourceCloudStorage(CloudStorage):
         :param rid: The resource ID.
         :param filename: The unmunged resource filename.
         """
+	print("Getting path")
+	print(os.path.join(self.parent_directory_name, 'resources', rid, munge.munge_filename(filename)))
         return os.path.join(
-            'resources',
+            self.parent_directory_name, 'resources',
             rid,
             munge.munge_filename(filename)
         )
