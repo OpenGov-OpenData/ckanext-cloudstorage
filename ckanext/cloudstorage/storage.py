@@ -85,8 +85,8 @@ class CloudStorage(object):
     def parent_directory_name(self):
 	"""
         '' if ckanext-cloudstorage is not configured to have a parent
-	directory in the cloudstorage bucket, otherwise it is the 
-	specified parent_dir_name.
+        directory in the cloudstorage bucket, otherwise it is the 
+        specified parent_dir_name.
         """
 	return config.get('ckanext.cloudstorage.parent_dir_name', '')
 
@@ -198,8 +198,8 @@ class ResourceCloudStorage(CloudStorage):
     def path_from_filename(self, rid, filename):
         """
         Returns a bucket path for the given resource_id and filename.
-	If there is no parent directory name specified, the root of 
-	the bucket will contain the resources directory.
+        If there is no parent directory name specified, the root of 
+        the bucket will contain the resources directory.
         :param rid: The resource ID.
         :param filename: The unmunged resource filename.
         """
