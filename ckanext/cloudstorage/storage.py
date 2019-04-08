@@ -82,6 +82,15 @@ class CloudStorage(object):
         )
 
     @property
+    def parent_directory_name(self):
+	"""
+        '' if ckanext-cloudstorage is not configured to have a parent
+        directory in the cloudstorage bucket, otherwise it is the 
+        specified parent_dir_name.
+        """
+	return config.get('ckanext.cloudstorage.parent_dir_name', '')
+
+    @property
     def leave_files(self):
         """
         `True` if ckanext-cloudstorage is configured to leave files on the
@@ -191,12 +200,13 @@ class ResourceCloudStorage(CloudStorage):
     def path_from_filename(self, rid, filename):
         """
         Returns a bucket path for the given resource_id and filename.
-
+        If there is no parent directory name specified, the root of 
+        the bucket will contain the resources directory.
         :param rid: The resource ID.
         :param filename: The unmunged resource filename.
         """
         return os.path.join(
-            'resources',
+            self.parent_directory_name, 'resources',
             rid,
             munge.munge_filename(filename)
         )
@@ -261,7 +271,7 @@ class ResourceCloudStorage(CloudStorage):
                 # outstanding lease.
                 return
 
-    def get_url_from_filename(self, rid, filename):
+    def get_url_from_filename(self, rid, filename, content_type=None):
         """
         Retrieve a publically accessible URL for the given resource_id
         and filename.
@@ -273,6 +283,7 @@ class ResourceCloudStorage(CloudStorage):
 
         :param rid: The resource ID.
         :param filename: The resource filename.
+        :param content_type: Optionally a Content-Type header.
 
         :returns: Externally accessible URL or None.
         """
@@ -305,13 +316,16 @@ class ResourceCloudStorage(CloudStorage):
                 self.driver_options['key'],
                 self.driver_options['secret']
             )
-            return s3_connection.generate_url(
-                expires_in=60 * 60,
-                method='GET',
-                bucket=self.container_name,
-                query_auth=True,
-                key=path
-            )
+
+            generate_url_params = {"expires_in": 60 * 60,
+                                   "method": "GET",
+                                   "bucket": self.container_name,
+                                   "query_auth": True,
+                                   "key": path}
+            if content_type:
+                generate_url_params['headers'] = {"Content-Type": content_type}
+
+            return s3_connection.generate_url(**generate_url_params)
 
         # Find the object for the given key.
         obj = self.container.get_object(path)
