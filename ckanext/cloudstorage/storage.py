@@ -86,12 +86,12 @@ class CloudStorage(object):
 
     @property
     def parent_directory_name(self):
-	"""
+        """
         '' if ckanext-cloudstorage is not configured to have a parent
         directory in the cloudstorage bucket, otherwise it is the 
         specified parent_dir_name.
         """
-	return config.get('ckanext.cloudstorage.parent_dir_name', '')
+        return config.get('ckanext.cloudstorage.parent_dir_name', '')
 
     @property
     def leave_files(self):
@@ -267,8 +267,10 @@ class ResourceCloudStorage(CloudStorage):
                     # check if already uploaded
                     object_name = self.path_from_filename(id, self.filename)
                     try:
-                        cloud_object = self.container.get_object(object_name=object_name)
-                        log.debug("\t Object found, checking size %s: %s", object_name, cloud_object.size)
+                        cloud_object = self.container.get_object(
+                            object_name=object_name)
+                        log.debug("\t Object found, checking size %s: %s",
+                                  object_name, cloud_object.size)
                         if os.path.isfile(self.filename):
                             file_size = os.path.getsize(self.filename)
                         else:
@@ -276,25 +278,34 @@ class ResourceCloudStorage(CloudStorage):
                             file_size = self.file_upload.tell()
                             self.file_upload.seek(0, os.SEEK_SET)
 
-                        log.debug("\t - File size %s: %s", self.filename, file_size)
+                        log.debug("\t - File size %s: %s",
+                                  self.filename, file_size)
                         if file_size == int(cloud_object.size):
-                            log.debug("\t Size fits, checking hash %s: %s", object_name, cloud_object.hash)
-                            hash_file = hashlib.md5(self.file_upload.read()).hexdigest()
+                            log.debug("\t Size fits, checking hash %s: %s",
+                                      object_name, cloud_object.hash)
+                            hash_file = hashlib.md5(
+                                self.file_upload.read()).hexdigest()
                             self.file_upload.seek(0, os.SEEK_SET)
-                            log.debug("\t - File hash %s: %s", self.filename, hash_file)
+                            log.debug("\t - File hash %s: %s",
+                                      self.filename, hash_file)
                             # basic hash
                             if hash_file == cloud_object.hash:
-                                log.debug("\t => File found, matching hash, skipping upload")
+                                log.debug(
+                                    "\t => File found, matching hash, skipping upload")
                                 return
                             # multipart hash
                             multi_hash_file = _md5sum(self.file_upload)
-                            log.debug("\t - File multi hash %s: %s", self.filename, multi_hash_file)
+                            log.debug("\t - File multi hash %s: %s",
+                                      self.filename, multi_hash_file)
                             if multi_hash_file == cloud_object.hash:
-                                log.debug("\t => File found, matching hash, skipping upload")
+                                log.debug(
+                                    "\t => File found, matching hash, skipping upload")
                                 return
-                        log.debug("\t Resource found in the cloud but outdated, uploading")
+                        log.debug(
+                            "\t Resource found in the cloud but outdated, uploading")
                     except ObjectDoesNotExistError:
-                        log.debug("\t Resource not found in the cloud, uploading")
+                        log.debug(
+                            "\t Resource not found in the cloud, uploading")
 
                     # If it's temporary file, we'd better convert it
                     # into FileIO. Otherwise libcloud will iterate
@@ -311,8 +322,10 @@ class ResourceCloudStorage(CloudStorage):
                             file_upload_iter = file_upload._file
                     else:
                         file_upload_iter = iter(file_upload)
-                    self.container.upload_object_via_stream(iterator=file_upload_iter, object_name=object_name)
-                    log.debug("\t => UPLOADED %s: %s", self.filename, object_name)
+                    self.container.upload_object_via_stream(
+                        iterator=file_upload_iter, object_name=object_name)
+                    log.debug("\t => UPLOADED %s: %s",
+                              self.filename, object_name)
                 except (ValueError, types.InvalidCredsError) as err:
                     log.error(traceback.format_exc())
                     raise err
