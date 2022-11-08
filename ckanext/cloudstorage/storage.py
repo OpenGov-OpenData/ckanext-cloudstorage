@@ -9,6 +9,7 @@ import tempfile
 from six.moves.urllib.parse import urljoin
 from ast import literal_eval
 from datetime import datetime, timedelta
+from tempfile import SpooledTemporaryFile
 
 from pylons import config
 from ckan import model
@@ -17,6 +18,16 @@ import ckan.plugins as p
 
 from libcloud.storage.types import Provider, ObjectDoesNotExistError
 from libcloud.storage.providers import get_driver
+
+
+from werkzeug.datastructures import FileStorage as FlaskFileStorage
+ALLOWED_UPLOAD_TYPES = (cgi.FieldStorage, FlaskFileStorage)
+
+
+def _get_underlying_file(wrapper):
+    if isinstance(wrapper, FlaskFileStorage):
+        return wrapper.stream
+    return wrapper.file
 
 
 class CloudStorage(object):
@@ -174,9 +185,9 @@ class ResourceCloudStorage(CloudStorage):
         multipart_name = resource.pop('multipart_name', None)
 
         # Check to see if a file has been provided
-        if isinstance(upload_field_storage, cgi.FieldStorage):
+        if isinstance(upload_field_storage, (ALLOWED_UPLOAD_TYPES)):
             self.filename = munge.munge_filename(upload_field_storage.filename)
-            self.file_upload = upload_field_storage.file
+            self.file_upload = _get_underlying_file(upload_field_storage)
             resource['url'] = self.filename
             resource['url_type'] = 'upload'
             resource['last_modified'] = datetime.utcnow()
@@ -248,87 +259,18 @@ class ResourceCloudStorage(CloudStorage):
                     content_settings=content_settings
                 )
             else:
-                try:
-                    file_upload = self.file_upload
-                    # in Python3 libcloud iterates over uploaded file,
-                    # while it's wrappend into non-iterator. So, pick real
-                    # file-object and give it to cloudstorage
-                    # if six.PY3:
-                    #    file_upload = file_upload._file
 
-                    # self.container.upload_object_via_stream(
-                    #     file_upload,
-                    #     object_name=self.path_from_filename(
-                    #         id,
-                    #         self.filename
-                    #     )
-                    # )
+                # TODO: This might not be needed once libcloud is upgraded
+                if isinstance(self.file_upload, SpooledTemporaryFile):
+                    self.file_upload.next = self.file_upload.next()
 
-                    # check if already uploaded
-                    object_name = self.path_from_filename(id, self.filename)
-                    try:
-                        cloud_object = self.container.get_object(
-                            object_name=object_name)
-                        log.debug("\t Object found, checking size %s: %s",
-                                  object_name, cloud_object.size)
-                        if os.path.isfile(self.filename):
-                            file_size = os.path.getsize(self.filename)
-                        else:
-                            self.file_upload.seek(0, os.SEEK_END)
-                            file_size = self.file_upload.tell()
-                            self.file_upload.seek(0, os.SEEK_SET)
-
-                        log.debug("\t - File size %s: %s",
-                                  self.filename, file_size)
-                        if file_size == int(cloud_object.size):
-                            log.debug("\t Size fits, checking hash %s: %s",
-                                      object_name, cloud_object.hash)
-                            hash_file = hashlib.md5(
-                                self.file_upload.read()).hexdigest()
-                            self.file_upload.seek(0, os.SEEK_SET)
-                            log.debug("\t - File hash %s: %s",
-                                      self.filename, hash_file)
-                            # basic hash
-                            if hash_file == cloud_object.hash:
-                                log.debug(
-                                    "\t => File found, matching hash, skipping upload")
-                                return
-                            # multipart hash
-                            multi_hash_file = _md5sum(self.file_upload)
-                            log.debug("\t - File multi hash %s: %s",
-                                      self.filename, multi_hash_file)
-                            if multi_hash_file == cloud_object.hash:
-                                log.debug(
-                                    "\t => File found, matching hash, skipping upload")
-                                return
-                        log.debug(
-                            "\t Resource found in the cloud but outdated, uploading")
-                    except ObjectDoesNotExistError:
-                        log.debug(
-                            "\t Resource not found in the cloud, uploading")
-
-                    # If it's temporary file, we'd better convert it
-                    # into FileIO. Otherwise libcloud will iterate
-                    # over lines, not over chunks and it will really
-                    # slow down the process for files that consist of
-                    # millions of short linew
-                    if isinstance(file_upload, tempfile.SpooledTemporaryFile):
-                        file_upload.rollover()
-                        try:
-                            # extract underlying file
-                            file_upload_iter = file_upload._file.detach()
-                        except AttributeError:
-                            # It's python2
-                            file_upload_iter = file_upload._file
-                    else:
-                        file_upload_iter = iter(file_upload)
-                    self.container.upload_object_via_stream(
-                        iterator=file_upload_iter, object_name=object_name)
-                    log.debug("\t => UPLOADED %s: %s",
-                              self.filename, object_name)
-                except (ValueError, types.InvalidCredsError) as err:
-                    log.error(traceback.format_exc())
-                    raise err
+                self.container.upload_object_via_stream(
+                    self.file_upload,
+                    object_name=self.path_from_filename(
+                        id,
+                        self.filename
+                    )
+                )
 
         elif self._clear and self.old_filename and not self.leave_files:
             # This is only set when a previously-uploaded file is replace
