@@ -256,7 +256,9 @@ class ResourceCloudStorage(CloudStorage):
         :param rid: The resource ID.
         :param filename: The unmunged resource filename.
         """
-        return os.path.join("resources", rid, munge.munge_filename(filename))
+        return os.path.join(
+            self.parent_directory_name, "resources", rid, munge.munge_filename(filename)
+        )
 
     def upload(self, id, max_size=10):
         """
