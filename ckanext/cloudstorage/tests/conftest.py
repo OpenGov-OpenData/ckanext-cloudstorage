@@ -3,8 +3,6 @@ import os
 
 import pytest
 
-from ckanext.cloudstorage import utils
-
 
 @pytest.fixture
 def with_driver_options(ckan_config, monkeypatch):

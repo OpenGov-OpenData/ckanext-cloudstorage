@@ -105,7 +105,7 @@ def migrate(path, single_id):
 
     if failed:
         log_file = tempfile.NamedTemporaryFile(delete=False)
-        log_file.file.writelines([l.encode() for l in failed])
+        log_file.file.writelines([line.encode() for line in failed])
         print(
             "ID of all failed uploads are saved to `{0}`: {1}".format(
                 log_file.name, failed

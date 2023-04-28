@@ -3,7 +3,6 @@
 import ckan.plugins as p
 import pytest
 from ckan.tests import factories, helpers
-from libcloud.storage.types import ObjectDoesNotExistError
 
 
 @pytest.mark.usefixtures("with_driver_options", "with_plugins", "clean_db")

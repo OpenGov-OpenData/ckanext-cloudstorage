@@ -4,7 +4,6 @@ import datetime
 import logging
 import mimetypes
 
-import ckan.lib.helpers as h
 import ckan.model as model
 import ckan.plugins.toolkit as toolkit
 import libcloud.security
@@ -116,14 +115,13 @@ def initiate_multipart(context, data_dict):
 
     uploader = get_resource_uploader({"multipart_name": name, "id": id})
     if not isinstance(uploader, ResourceCloudStorage):
-        raise toolkit.ValidationError(
-            {
-                "uploader": [
-                    "Must be ResourceCloudStorage or its subclass, not"
-                    f" {type(uploadev)}"
-                ]
-            }
-        )
+        raise toolkit.ValidationError({
+            "uploader": [
+                "Must be ResourceCloudStorage or its subclass, not {}".format(
+                    type(uploader)
+                )
+            ]
+        })
     res_name = uploader.path_from_filename(id, name)
 
     upload_object = MultipartUpload.by_name(res_name)
@@ -150,7 +148,7 @@ def initiate_multipart(context, data_dict):
                 for obj in old_objects:
                     for similar in model.Session.query(
                         model.Resource
-                    ).filter_by(url=obj.name[len(name_prefix) + 1 :]):
+                    ).filter_by(url=obj.name[len(name_prefix) + 1:]):
                         if obj.name == uploader.path_from_filename(
                             similar.id, similar.url
                         ):
