@@ -49,3 +49,11 @@ class TestResourceCloudStorage(object):
         )
 
         assert urlparse(url).query
+
+    @pytest.mark.ckan_config("ckanext.cloudstorage.parent_dir_name", "test-parent-dir")
+    def test_file_path(self):
+        filename = "file.txt"
+        rid = "abcd1234-abcd-1234-abcd-1234abcd1234"
+        file_path = ResourceCloudStorage.path_from_filename(rid, filename)
+
+        assert file_path == "/test-parent-dir/resources/abcd1234-abcd-1234-abcd-1234abcd1234/file.txt"
