@@ -362,6 +362,7 @@ class ResourceCloudStorage(CloudStorage):
                     # over lines, not over chunks and it will really
                     # slow down the process for files that consist of
                     # millions of short linew
+                    self.file_upload.seek(0, os.SEEK_SET)
                     if isinstance(file_upload, tempfile.SpooledTemporaryFile):
                         file_upload.rollover()
                         try:
