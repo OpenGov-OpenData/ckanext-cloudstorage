@@ -19,6 +19,9 @@ from ckan.lib import munge
 from libcloud.storage.providers import get_driver
 from libcloud.storage.types import ObjectDoesNotExistError, Provider
 from werkzeug.datastructures import FileStorage as FlaskFileStorage
+import ssl
+import libcloud.security
+
 
 config = p.toolkit.config
 
@@ -65,6 +68,7 @@ def _md5sum(fobj):
 
 class CloudStorage(object):
     def __init__(self):
+        libcloud.security.SSL_VERSION = ssl.PROTOCOL_TLSv1_2
         self.driver = get_driver(getattr(Provider, self.driver_name))(
             **self.driver_options
         )
