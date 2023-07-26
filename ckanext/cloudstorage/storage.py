@@ -14,10 +14,13 @@ import ckan.plugins as p
 
 from libcloud.storage.types import Provider, ObjectDoesNotExistError
 from libcloud.storage.providers import get_driver
+import ssl
+import libcloud.security
 
 
 class CloudStorage(object):
     def __init__(self):
+        libcloud.security.SSL_VERSION = ssl.PROTOCOL_TLSv1_2
         self.driver = get_driver(
             getattr(
                 Provider,
