@@ -117,7 +117,6 @@ class TestMultipartUpload(object):
         assert url
         assert requests.get(url).content == fp.getvalue()
 
-
         fp = BytesIO(b"a" * 10)
         fp.seek(0)
         res = _upload(res, filename, 10, [fp])
