@@ -424,7 +424,7 @@ ckan.module("cloudstorage-multipart-upload", function($, _) {
             // self._form.remove();
             if (self._clickedBtn == "again") {
               this._redirect_url = self.sandbox.url(
-                "/dataset/new_resource/" + self._packageId
+                "/dataset/" + self._packageId + "/resource/new"
               );
             } else {
               this._redirect_url = self.sandbox.url(
