@@ -236,11 +236,15 @@ def finish_multipart(context, data_dict):
     ]
     uploader = get_resource_uploader({"id": upload.resource_id})
 
-    try:
-        obj = uploader.container.get_object(upload.name)
-        obj.delete()
-    except Exception:
-        pass
+    # Disable the block below, because it causes 404 error when user
+    # uploads a file with the same name as previous file.
+    # TODO: investigate possible side effects
+    # try:
+    #     obj = uploader.container.get_object(upload.name)
+    #     obj.delete()
+    # except Exception:
+    #     pass
+
     uploader.driver._commit_multipart(
         container=uploader.container,
         object_name=upload.name,

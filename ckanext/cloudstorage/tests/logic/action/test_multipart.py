@@ -2,6 +2,7 @@
 
 from io import BytesIO
 
+import requests
 import pytest
 from ckan.tests import factories, helpers
 
@@ -100,3 +101,50 @@ class TestMultipartUpload(object):
         )
         assert result["commited"]
         assert storage.get_url_from_filename(res["id"], filename)
+
+    def test_reupload(self):
+        filename = "file.txt"
+        res = factories.Resource()
+        from icecream import ic
+        ic(res["id"])
+
+        fp = BytesIO(b"b" * 10)
+        fp.seek(0)
+        res = _upload(res, filename, 10, [fp])
+
+        storage = ResourceCloudStorage(res)
+        url = storage.get_url_from_filename(res["id"], filename)
+        assert url
+        assert requests.get(url).content == fp.getvalue()
+
+        fp = BytesIO(b"a" * 10)
+        fp.seek(0)
+        res = _upload(res, filename, 10, [fp])
+
+        storage = ResourceCloudStorage(res)
+        url = storage.get_url_from_filename(res["id"], filename)
+        assert url
+        assert requests.get(url).content == fp.getvalue()
+
+
+def _upload(res, filename, size, parts):
+    multipart = helpers.call_action(
+        "cloudstorage_initiate_multipart",
+        id=res["id"],
+        name=filename,
+        size=size,
+    )
+
+    for idx, part in enumerate(parts, 1):
+        helpers.call_action(
+            "cloudstorage_upload_multipart",
+            uploadId=multipart["id"],
+            partNumber=idx,
+            upload=FakeFileStorage(part, filename),
+        )
+
+    result = helpers.call_action(
+        "cloudstorage_finish_multipart", uploadId=multipart["id"]
+    )
+    assert result["commited"]
+    return helpers.call_action("resource_update", **dict(res, url_type="upload", url=filename))
