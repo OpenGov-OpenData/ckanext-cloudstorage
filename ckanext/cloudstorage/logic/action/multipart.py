@@ -37,8 +37,13 @@ def _get_object_url(uploader, name):
 
 
 def _delete_multipart(upload, uploader):
+    log.debug("_delete_multipart url {0}".format(_get_object_url(uploader, upload.name)))
+    log.debug("_delete_multipart id {0}".format(upload.id))
     resp = uploader.driver.connection.request(
-        _get_object_url(uploader, upload.name) + "?uploadId=" + upload.id,
+        _get_object_url(uploader, upload.name),
+        params={
+            "uploadId": upload.id
+        },
         method="DELETE",
     )
 
