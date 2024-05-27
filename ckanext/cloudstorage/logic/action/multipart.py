@@ -96,6 +96,8 @@ def initiate_multipart(context, data_dict):
     uploader = ResourceCloudStorage({'multipart_name': name})
     res_name = uploader.path_from_filename(id, name)
 
+    log.info('initiate_multipart %s upload started' % (res_name))
+
     upload_object = MultipartUpload.by_name(res_name)
 
     if upload_object is not None:
@@ -155,13 +157,12 @@ def upload_multipart(context, data_dict):
         data=bytearray(part_content.file.read())
     )
     if resp.status != 200:
-        raise toolkit.ValidationError('Upload failed: part %s' % part_number)
+        log.info('upload_multipart failed for file %s, part %s with status %s' % (upload.name, part_number, resp.status))
+        raise toolkit.ValidationError("Upload failed: part %s" % part_number)
 
-    _save_part_info(part_number, resp.headers['etag'], upload)
-    return {
-        'partNumber': part_number,
-        'ETag': resp.headers['etag']
-    }
+    _save_part_info(part_number, resp.headers["etag"], upload)
+    log.info('upload_multipart %s uploading part %s' % (upload.name, part_number))
+    return {"partNumber": part_number, "ETag": resp.headers["etag"]}
 
 
 def finish_multipart(context, data_dict):
@@ -211,8 +212,10 @@ def finish_multipart(context, data_dict):
                     dict(id=pkg_dict['id'], state='active')
                 )
         except Exception as e:
-            log.error(e)
-    return {'commited': True}
+            log.error('finish_multipart failed %s with error %s' % (upload.name, str(e)))
+    
+    log.info('finish_multipart %s finished successfully' % (upload.name))
+    return {"commited": True}
 
 
 def abort_multipart(context, data_dict):
