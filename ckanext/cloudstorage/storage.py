@@ -6,6 +6,7 @@ import os.path
 import urlparse
 from ast import literal_eval
 from datetime import datetime, timedelta
+from tempfile import SpooledTemporaryFile
 
 from pylons import config
 from ckan import model
@@ -16,6 +17,16 @@ from libcloud.storage.types import Provider, ObjectDoesNotExistError
 from libcloud.storage.providers import get_driver
 import ssl
 import libcloud.security
+
+
+from werkzeug.datastructures import FileStorage as FlaskFileStorage
+ALLOWED_UPLOAD_TYPES = (cgi.FieldStorage, FlaskFileStorage)
+
+
+def _get_underlying_file(wrapper):
+    if isinstance(wrapper, FlaskFileStorage):
+        return wrapper.stream
+    return wrapper.file
 
 
 class CloudStorage(object):
@@ -174,9 +185,9 @@ class ResourceCloudStorage(CloudStorage):
         multipart_name = resource.pop('multipart_name', None)
 
         # Check to see if a file has been provided
-        if isinstance(upload_field_storage, cgi.FieldStorage):
+        if isinstance(upload_field_storage, (ALLOWED_UPLOAD_TYPES)):
             self.filename = munge.munge_filename(upload_field_storage.filename)
-            self.file_upload = upload_field_storage.file
+            self.file_upload = _get_underlying_file(upload_field_storage)
             resource['url'] = self.filename
             resource['url_type'] = 'upload'
             resource['last_modified'] = datetime.utcnow()
@@ -248,6 +259,11 @@ class ResourceCloudStorage(CloudStorage):
                     content_settings=content_settings
                 )
             else:
+
+                # TODO: This might not be needed once libcloud is upgraded
+                if isinstance(self.file_upload, SpooledTemporaryFile):
+                    self.file_upload.next = self.file_upload.next()
+
                 self.container.upload_object_via_stream(
                     self.file_upload,
                     object_name=self.path_from_filename(
