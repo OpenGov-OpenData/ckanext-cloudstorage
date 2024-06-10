@@ -129,6 +129,7 @@ def initiate_multipart(context, data_dict):
         })
     res_name = uploader.path_from_filename(id, name)
 
+    log.info('initiate_multipart started for %s' % (res_name))
     upload_object = MultipartUpload.by_name(res_name)
 
     if upload_object is not None:
@@ -210,9 +211,11 @@ def upload_multipart(context, data_dict):
         data=data,
     )
     if resp.status != 200:
+        log.error('upload_multipart failed for %s, part %s with status %s' % (upload.name, part_number, resp.status))
         raise toolkit.ValidationError("Upload failed: part %s" % part_number)
 
     _save_part_info(part_number, resp.headers["etag"], upload)
+    log.info('upload_multipart uploaded %s, part %s' % (upload.name, part_number))
     return {"partNumber": part_number, "ETag": resp.headers["etag"]}
 
 
@@ -273,7 +276,8 @@ def finish_multipart(context, data_dict):
                     dict(id=pkg_dict["id"], state="active"),
                 )
         except Exception as e:
-            log.error(e)
+            log.error('finish_multipart failed for %s with error %s' % (upload.name, str(e)))
+    log.info('finish_multipart successfully finished for %s' % (upload.name))
     return {"commited": True}
 
 
