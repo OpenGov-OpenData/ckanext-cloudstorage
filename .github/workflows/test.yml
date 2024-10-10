@@ -57,4 +57,17 @@ jobs:
       run: |
         ckan -c test.ini db init
     - name: Run tests
-      run: pytest --ckan-ini=test.ini --cov=ckanext.cloudstorage --disable-warnings ckanext/cloudstorage/tests
+      run: pytest --ckan-ini=test.ini --cov=ckanext.cloudstorage --cov-report xml:coverage.xml --disable-warnings ckanext/cloudstorage/tests
+    - name: SonarQube Scan
+      uses: sonarsource/sonarqube-scan-action@master
+      with:
+        args: >
+          -Dsonar.projectKey=ckanext-cloudstorage
+          -Dsonar.sources=ckanext/cloudstorage
+          -Dsonar.tests=ckanext/cloudstorage/tests
+          -Dsonar.exclusions=ckanext/cloudstorage/tests/**
+          -Dsonar.python.coverage.reportPaths=coverage.xml
+      env:
+        SONAR_TOKEN: ${{ secrets.SONAR_API_TOKEN }}
+        SONAR_HOST_URL: ${{ secrets.SONAR_EXTERNAL_URL }}
+
