@@ -115,6 +115,16 @@ def initiate_multipart(context, data_dict):
 
     toolkit.check_access("cloudstorage_initiate_multipart", context, data_dict)
     id, name, size = toolkit.get_or_bust(data_dict, ["id", "name", "size"])
+
+    resource = model.Resource.get(id)
+    if not resource:
+        log.debug('Could not find resource %s', id)
+        raise toolkit.ValidationError({
+            "uploader": [
+                "Resource was not found"
+            ]
+        })
+
     user_obj = model.User.get(context["user"])
     user_id = user_obj.id if user_obj else None
 
