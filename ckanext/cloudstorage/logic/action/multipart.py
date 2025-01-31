@@ -285,6 +285,9 @@ def finish_multipart(context, data_dict):
                     dict(context.copy(), allow_state_change=True),
                     dict(id=pkg_dict["id"], state="active"),
                 )
+            resource = model.Session.query(model.Resource).get(res_dict["id"])
+            resource.last_modified = datetime.datetime.utcnow()
+            resource.commit()
         except Exception as e:
             log.error('finish_multipart failed for %s with error %s' % (upload.name, str(e)))
     log.info('finish_multipart successfully finished for %s' % (upload.name))
