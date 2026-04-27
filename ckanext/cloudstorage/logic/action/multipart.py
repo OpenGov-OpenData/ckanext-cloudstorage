@@ -269,8 +269,35 @@ def finish_multipart(context, data_dict):
         upload_id=upload_id,
         chunks=chunks,
     )
+    resource_id = upload.resource_id
     upload.delete()
     upload.commit()
+
+    # Clear the pending-upload flag so downstream extensions (xloader) can
+    # act on the now-committed file. resource_patch fires
+    # IDomainObjectModification.notify(changed), which is how xloader picks
+    # this up without requiring a direct dependency.
+    try:
+        toolkit.get_action("resource_patch")(
+            dict(context.copy(), ignore_auth=True),
+            {
+                "id": resource_id,
+                "cloudstorage_multipart_pending": "False",
+            },
+        )
+        log.debug(
+            "cloudstorage multipart: cleared pending flag after finish "
+            "(resource_id=%s upload_id=%s)",
+            resource_id,
+            upload_id,
+        )
+    except Exception:
+        log.exception(
+            "cloudstorage multipart: failed to clear pending flag after "
+            "finish (resource_id=%s upload_id=%s)",
+            resource_id,
+            upload_id,
+        )
 
     if save_action and save_action == "go-metadata":
         try:
@@ -308,6 +335,28 @@ def abort_multipart(context, data_dict):
         aborted.append(upload.id)
 
     model.Session.commit()
+
+    # Clear the pending-upload flag so the resource is not stranded with a
+    # never-cleared flag after the user cancels a multipart upload.
+    try:
+        toolkit.get_action("resource_patch")(
+            dict(context.copy(), ignore_auth=True),
+            {
+                "id": id,
+                "cloudstorage_multipart_pending": "False",
+            },
+        )
+        log.debug(
+            "cloudstorage multipart: aborted upload ids for resource %s: %s",
+            id,
+            aborted,
+        )
+    except Exception:
+        log.exception(
+            "cloudstorage multipart: failed to clear pending flag after "
+            "abort (resource_id=%s)",
+            id,
+        )
 
     return aborted
 
