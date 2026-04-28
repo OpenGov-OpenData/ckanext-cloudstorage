@@ -237,8 +237,9 @@ def finish_multipart(context, data_dict):
 
     :param context:
     :param data_dict: dict with required key `uploadId` - id of Multipart Upload that should be finished
-    :returns: None
-    :rtype: NoneType
+    :returns: dict with ``commited`` (multipart committed to storage) and
+        ``pending_flag_cleared`` (whether CKAN extra ``cloudstorage_multipart_pending`` was cleared)
+    :rtype: dict
 
     """
 
@@ -277,12 +278,13 @@ def finish_multipart(context, data_dict):
     # act on the now-committed file. resource_patch fires
     # IDomainObjectModification.notify(changed), which is how xloader picks
     # this up without requiring a direct dependency.
+    pending_flag_cleared = True
     try:
         toolkit.get_action("resource_patch")(
             dict(context.copy(), ignore_auth=True),
             {
                 "id": resource_id,
-                "cloudstorage_multipart_pending": "False",
+                "cloudstorage_multipart_pending": False,
             },
         )
         log.debug(
@@ -292,6 +294,7 @@ def finish_multipart(context, data_dict):
             upload_id,
         )
     except Exception:
+        pending_flag_cleared = False
         log.exception(
             "cloudstorage multipart: failed to clear pending flag after "
             "finish (resource_id=%s upload_id=%s)",
@@ -318,7 +321,7 @@ def finish_multipart(context, data_dict):
         except Exception as e:
             log.error('finish_multipart failed for %s with error %s' % (upload.name, str(e)))
     log.info('finish_multipart successfully finished for %s' % (upload.name))
-    return {"commited": True}
+    return {"commited": True, "pending_flag_cleared": pending_flag_cleared}
 
 
 def abort_multipart(context, data_dict):
@@ -338,12 +341,13 @@ def abort_multipart(context, data_dict):
 
     # Clear the pending-upload flag so the resource is not stranded with a
     # never-cleared flag after the user cancels a multipart upload.
+    pending_flag_cleared = True
     try:
         toolkit.get_action("resource_patch")(
             dict(context.copy(), ignore_auth=True),
             {
                 "id": id,
-                "cloudstorage_multipart_pending": "False",
+                "cloudstorage_multipart_pending": False,
             },
         )
         log.debug(
@@ -352,13 +356,14 @@ def abort_multipart(context, data_dict):
             aborted,
         )
     except Exception:
+        pending_flag_cleared = False
         log.exception(
             "cloudstorage multipart: failed to clear pending flag after "
             "abort (resource_id=%s)",
             id,
         )
 
-    return aborted
+    return {"aborted": aborted, "pending_flag_cleared": pending_flag_cleared}
 
 
 def clean_multipart(context, data_dict):
