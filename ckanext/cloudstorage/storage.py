@@ -224,6 +224,24 @@ class ResourceCloudStorage(CloudStorage):
         self._clear = resource.pop("clear_upload", None)
         multipart_name = resource.pop("multipart_name", None)
 
+        # Mark multipart uploads as pending so hooks (e.g. xloader) wait until
+        # chunks finish. Set here when multipart_name is sent with create/update;
+        # cleared in finish_multipart / abort_multipart.
+        if multipart_name:
+            resource["cloudstorage_multipart_pending"] = "True"
+            log.info(
+                "cloudstorage multipart: pending flag set "
+                "(resource_id=%s filename=%s)",
+                resource.get("id"),
+                multipart_name,
+            )
+            log.debug(
+                "cloudstorage multipart: pending flag details "
+                "(resource_id=%s can_use_advanced_aws=%s)",
+                resource.get("id"),
+                self.can_use_advanced_aws,
+            )
+
         # Check to see if a file has been provided
         if (
             isinstance(upload_field_storage, (ALLOWED_UPLOAD_TYPES))
