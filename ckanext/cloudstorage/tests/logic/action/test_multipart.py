@@ -4,28 +4,19 @@ from io import BytesIO
 
 import requests
 import pytest
-import ckan.plugins.toolkit as toolkit
 from ckan.tests import factories, helpers
 
 from ckanext.cloudstorage.storage import ResourceCloudStorage
 from ckanext.cloudstorage.utils import FakeFileStorage
 
 
-def _patch_resource_patch_fails(monkeypatch, message="resource_patch failed"):
-    _orig = toolkit.get_action
-
-    def get_action(name):
-        if name == "resource_patch":
-
-            def _raise(*_a, **_kw):
-                raise RuntimeError(message)
-
-            return _raise
-        return _orig(name)
+def _patch_clear_pending_fails(monkeypatch, message="clear pending failed"):
+    def _raise(_resource_id):
+        raise RuntimeError(message)
 
     monkeypatch.setattr(
-        "ckanext.cloudstorage.logic.action.multipart.toolkit.get_action",
-        get_action,
+        "ckanext.cloudstorage.logic.action.multipart._clear_cloudstorage_multipart_pending",
+        _raise,
     )
 
 
@@ -78,7 +69,7 @@ class TestMultipartUpload(object):
         assert result["pending_flag_cleared"] is True
         assert storage.get_url_from_filename(res["id"], filename)
 
-    def test_finish_multipart_pending_flag_when_resource_patch_fails(
+    def test_finish_multipart_pending_flag_when_clear_pending_fails(
         self, monkeypatch
     ):
         filename = "file.txt"
@@ -105,18 +96,18 @@ class TestMultipartUpload(object):
             partNumber=2,
             upload=FakeFileStorage(fp, filename),
         )
-        _patch_resource_patch_fails(monkeypatch)
+        _patch_clear_pending_fails(monkeypatch)
         result = helpers.call_action(
             "cloudstorage_finish_multipart", uploadId=multipart["id"]
         )
         assert result["commited"] is True
         assert result["pending_flag_cleared"] is False
 
-    def test_abort_multipart_pending_flag_when_resource_patch_fails(
+    def test_abort_multipart_pending_flag_when_clear_pending_fails(
         self, monkeypatch
     ):
         res = factories.Resource()
-        _patch_resource_patch_fails(monkeypatch)
+        _patch_clear_pending_fails(monkeypatch)
         result = helpers.call_action("cloudstorage_abort_multipart", id=res["id"])
         assert result["aborted"] == []
         assert result["pending_flag_cleared"] is False
