@@ -43,10 +43,12 @@ def _clear_cloudstorage_multipart_pending(resource_id):
     Avoids ``resource_patch`` / ``package_update`` (full package round-trip and
     Solr via that path). Domain-object observers still run on commit so
     extensions (e.g. xloader) can react via ``IDomainObjectModification``.
+
+    If the resource row is gone, returns without error (nothing to clear).
     """
     resource = model.Resource.get(resource_id)
     if resource is None:
-        raise toolkit.ObjectNotFound("Resource was not found.")
+        return
 
     extras = dict(resource.extras or {})
     if extras.pop("cloudstorage_multipart_pending", None) is None:
