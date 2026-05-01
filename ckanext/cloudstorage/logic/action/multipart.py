@@ -8,6 +8,7 @@ import ckan.model as model
 import ckan.plugins.toolkit as toolkit
 import libcloud.security
 from ckan.lib.uploader import get_resource_uploader
+from sqlalchemy.orm.attributes import flag_modified
 from sqlalchemy.orm.exc import NoResultFound
 from werkzeug.datastructures import FileStorage as FlaskFileStorage
 
@@ -34,6 +35,28 @@ def _get_max_multipart_lifetime():
 
 def _get_object_url(uploader, name):
     return "/" + uploader.container_name + "/" + name
+
+
+def _clear_cloudstorage_multipart_pending(resource_id):
+    """Remove ``cloudstorage_multipart_pending`` from resource extras and commit.
+
+    Avoids ``resource_patch`` / ``package_update`` (full package round-trip and
+    Solr via that path). Domain-object observers still run on commit so
+    extensions (e.g. xloader) can react via ``IDomainObjectModification``.
+
+    If the resource row is gone, returns without error (nothing to clear).
+    """
+    resource = model.Resource.get(resource_id)
+    if resource is None:
+        return
+
+    extras = dict(resource.extras or {})
+    if extras.pop("cloudstorage_multipart_pending", None) is None:
+        return
+
+    resource.extras = extras
+    flag_modified(resource, "extras")
+    model.Session.commit()
 
 
 def _delete_multipart(upload, uploader):
@@ -247,13 +270,16 @@ def finish_multipart(context, data_dict):
     upload_id = toolkit.get_or_bust(data_dict, "uploadId")
     save_action = data_dict.get("save_action", False)
     upload = model.Session.query(MultipartUpload).get(upload_id)
+    resource_id = upload.resource_id
+    upload_name = upload.name
+
     chunks = [
         (part.n, part.etag)
         for part in model.Session.query(MultipartPart)
         .filter_by(upload_id=upload_id)
         .order_by(MultipartPart.n)
     ]
-    uploader = get_resource_uploader({"id": upload.resource_id})
+    uploader = get_resource_uploader({"id": resource_id})
 
     # Disable the block below, because it causes 404 error when user
     # uploads a file with the same name as previous file.
@@ -266,27 +292,19 @@ def finish_multipart(context, data_dict):
 
     uploader.driver._commit_multipart(
         container=uploader.container,
-        object_name=upload.name,
+        object_name=upload_name,
         upload_id=upload_id,
         chunks=chunks,
     )
-    resource_id = upload.resource_id
+
     upload.delete()
     upload.commit()
 
-    # Clear the pending-upload flag so downstream extensions (xloader) can
-    # act on the now-committed file. resource_patch fires
-    # IDomainObjectModification.notify(changed), which is how xloader picks
-    # this up without requiring a direct dependency.
+    # Clear the pending-upload flag without resource_patch/package_update.
+    # Session.commit() still triggers IDomainObjectModification observers (xloader).
     pending_flag_cleared = True
     try:
-        toolkit.get_action("resource_patch")(
-            dict(context.copy(), ignore_auth=True),
-            {
-                "id": resource_id,
-                "cloudstorage_multipart_pending": False,
-            },
-        )
+        _clear_cloudstorage_multipart_pending(resource_id)
         log.debug(
             "cloudstorage multipart: cleared pending flag after finish "
             "(resource_id=%s upload_id=%s)",
@@ -319,8 +337,8 @@ def finish_multipart(context, data_dict):
             resource.last_modified = datetime.datetime.utcnow()
             resource.commit()
         except Exception as e:
-            log.error('finish_multipart failed for %s with error %s' % (upload.name, str(e)))
-    log.info('finish_multipart successfully finished for %s' % (upload.name))
+            log.error('finish_multipart failed for %s with error %s' % (upload_name, str(e)))
+    log.info('finish_multipart successfully finished for %s' % (upload_name))
     return {"commited": True, "pending_flag_cleared": pending_flag_cleared}
 
 
@@ -343,13 +361,7 @@ def abort_multipart(context, data_dict):
     # never-cleared flag after the user cancels a multipart upload.
     pending_flag_cleared = True
     try:
-        toolkit.get_action("resource_patch")(
-            dict(context.copy(), ignore_auth=True),
-            {
-                "id": id,
-                "cloudstorage_multipart_pending": False,
-            },
-        )
+        _clear_cloudstorage_multipart_pending(id)
         log.debug(
             "cloudstorage multipart: aborted upload ids for resource %s: %s",
             id,
