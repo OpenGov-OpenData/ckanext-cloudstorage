@@ -6,6 +6,7 @@ import pytest
 from ckan.tests import factories, helpers
 
 from ckanext.cloudstorage import storage, utils
+from ckanext.cloudstorage.utils import _save_instead_of_display
 
 
 @pytest.mark.usefixtures("with_driver_options", "with_plugins", "clean_db")
@@ -53,4 +54,21 @@ class TestResourceDownload(object):
         assert (
             urlparse(resp.headers["location"]).path
             == urlparse(expected_url).path
+        )
+
+
+class TestSaveInsteadOfDisplay(object):
+    def test_geojson_format_is_saved(self):
+        assert _save_instead_of_display(
+            "wicked_free_wifi_locations.geojson",
+            {"format": "GeoJSON"},
+        )
+
+    def test_json_extension_is_saved(self):
+        assert _save_instead_of_display("export.json", {"format": ""})
+
+    def test_csv_upload_is_left_unchanged(self):
+        assert not _save_instead_of_display(
+            "budget.csv",
+            {"format": "CSV", "mimetype": "text/csv"},
         )

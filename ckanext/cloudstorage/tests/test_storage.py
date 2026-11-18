@@ -5,7 +5,11 @@ import pytest
 from ckan.tests import factories
 
 from ckanext.cloudstorage import storage as cloudstorage_storage
-from ckanext.cloudstorage.storage import CloudStorage, ResourceCloudStorage
+from ckanext.cloudstorage.storage import (
+    CloudStorage,
+    ResourceCloudStorage,
+    attachment_content_disposition,
+)
 
 
 @pytest.mark.usefixtures("with_driver_options", "with_plugins")
@@ -125,3 +129,93 @@ class TestMultipartPendingFlag(object):
         ResourceCloudStorage(resource)
 
         assert resource.get("cloudstorage_multipart_pending") == "True"
+
+
+class TestAttachmentContentDisposition(object):
+    def test_geojson_filename_is_an_attachment(self):
+        header = attachment_content_disposition(
+            "wicked_free_wifi_locations.geojson"
+        )
+
+        assert header.startswith("attachment;")
+        assert 'filename="wicked_free_wifi_locations.geojson"' in header
+
+    def test_header_breaks_are_removed(self):
+        header = attachment_content_disposition('notes.json"\r\nX-Ignore: 1')
+
+        assert "\r" not in header
+        assert "\n" not in header
+        assert header.startswith('attachment; filename="notes.json')
+
+
+class TestSignedDownloadHeaders(object):
+    def test_aws_url_includes_attachment_header(self, monkeypatch):
+        import sys
+        import types
+
+        captured = {}
+
+        class FakeConnection(object):
+            def __init__(self, key, secret, host=None):
+                self.auth_region_name = None
+
+            def generate_url_sigv4(self, **params):
+                captured.update(params)
+                return "https://bucket.s3.amazonaws.com/file.geojson?signed=1"
+
+        connection_module = types.ModuleType("boto.s3.connection")
+        connection_module.S3Connection = FakeConnection
+        monkeypatch.setitem(sys.modules, "boto", types.ModuleType("boto"))
+        monkeypatch.setitem(sys.modules, "boto.s3", types.ModuleType("boto.s3"))
+        monkeypatch.setitem(
+            sys.modules, "boto.s3.connection", connection_module
+        )
+        monkeypatch.setattr(
+            ResourceCloudStorage,
+            "can_use_advanced_azure",
+            property(lambda self: False),
+        )
+        monkeypatch.setattr(
+            ResourceCloudStorage,
+            "can_use_advanced_aws",
+            property(lambda self: True),
+        )
+        monkeypatch.setattr(
+            ResourceCloudStorage,
+            "use_secure_urls",
+            property(lambda self: True),
+        )
+        monkeypatch.setattr(
+            ResourceCloudStorage,
+            "driver_options",
+            property(lambda self: {
+                "key": "key",
+                "secret": "secret",
+                "host": "s3.amazonaws.com",
+            }),
+        )
+        monkeypatch.setattr(
+            ResourceCloudStorage,
+            "container_name",
+            property(lambda self: "bucket"),
+        )
+
+        storage = ResourceCloudStorage.__new__(ResourceCloudStorage)
+        header = attachment_content_disposition(
+            "wicked_free_wifi_locations.geojson"
+        )
+        url = storage.get_url_by_path(
+            "resources/id/wicked_free_wifi_locations.geojson",
+            content_type="application/geo+json",
+            content_disposition=header,
+        )
+
+        assert url.startswith("https://bucket.s3.amazonaws.com/")
+        assert (
+            captured["response_headers"]["response-content-disposition"]
+            == header
+        )
+        assert (
+            captured["response_headers"]["Content-Type"]
+            == "application/geo+json"
+        )
