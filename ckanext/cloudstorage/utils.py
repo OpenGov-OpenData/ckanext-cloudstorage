@@ -12,7 +12,33 @@ from ckan.lib import base, uploader
 from ckanapi import LocalCKAN
 from werkzeug.datastructures import FileStorage as FakeFileStorage
 
-from ckanext.cloudstorage.storage import CloudStorage, ResourceCloudStorage
+from ckanext.cloudstorage.storage import (
+    CloudStorage,
+    ResourceCloudStorage,
+    attachment_content_disposition,
+)
+
+# Browsers render these in the tab. The download route asks object storage
+# to send Content-Disposition: attachment for them.
+_SAVE_EXTENSIONS = {".json", ".geojson"}
+_SAVE_TYPES = {
+    "json",
+    "geojson",
+    "application/json",
+    "application/geo+json",
+    "application/vnd.geo+json",
+}
+
+
+def _save_instead_of_display(filename, resource):
+    extension = os.path.splitext(filename or "")[1].lower()
+    resource_format = (resource.get("format") or "").strip().lower()
+    mimetype = (resource.get("mimetype") or "").split(";")[0].strip().lower()
+    return (
+        extension in _SAVE_EXTENSIONS
+        or resource_format in _SAVE_TYPES
+        or mimetype in _SAVE_TYPES
+    )
 
 
 def fix_cors(domains):
@@ -150,8 +176,15 @@ def resource_download(id, resource_id, filename=None):
     if not content_type:
         content_type, _enc = mimetypes.guess_type(filename)
 
+    content_disposition = None
+    if _save_instead_of_display(filename, resource):
+        content_disposition = attachment_content_disposition(filename)
+
     uploaded_url = upload.get_url_from_filename(
-        resource["id"], filename, content_type=content_type
+        resource["id"],
+        filename,
+        content_type=content_type,
+        content_disposition=content_disposition,
     )
 
     # The uploaded file is missing for some reason, such as the

@@ -10,7 +10,7 @@ import tempfile
 import traceback
 from ast import literal_eval
 from datetime import datetime, timedelta
-from urllib.parse import urljoin
+from urllib.parse import quote, unquote, urljoin
 
 import ckan.plugins as p
 import libcloud.common.types as types
@@ -39,6 +39,27 @@ def config_secure_ttl():
     return p.toolkit.asint(p.toolkit.config.get(
         CONFIG_SECURE_TTL, DEFAULT_SECURE_TTL
     ))
+
+
+def attachment_content_disposition(filename):
+    """Content-Disposition value that makes the browser save the file.
+
+    The download route redirects to object storage. Browsers render JSON
+    and GeoJSON inline unless that response is an attachment.
+    """
+    name = os.path.basename(unquote(filename or ""))
+    name = name.replace("\r", "").replace("\n", "").replace('"', "")
+    name = name.strip()
+    if not name or name in (".", ".."):
+        name = "download"
+    ascii_name = name.encode("ascii", "ignore").decode("ascii")
+    ascii_name = "".join(ch for ch in ascii_name if ch not in "\\;")
+    if not ascii_name:
+        ascii_name = "download"
+    encoded = quote(name, safe="")
+    return "attachment; filename=\"{0}\"; filename*=UTF-8''{1}".format(
+        ascii_name, encoded
+    )
 
 
 def _get_underlying_file(wrapper):
@@ -420,12 +441,13 @@ class ResourceCloudStorage(CloudStorage):
                 # outstanding lease.
                 return
 
-    def get_url_from_filename(self, rid, filename, content_type=None):
+    def get_url_from_filename(self, rid, filename, content_type=None,
+                              content_disposition=None):
         path = self.path_from_filename(rid, filename)
 
-        return self.get_url_by_path(path, content_type)
+        return self.get_url_by_path(path, content_type, content_disposition)
 
-    def get_url_by_path(self, path, content_type=None):
+    def get_url_by_path(self, path, content_type=None, content_disposition=None):
         """
         Retrieve a publically accessible URL for the given path
 
@@ -436,6 +458,9 @@ class ResourceCloudStorage(CloudStorage):
 
         :param path: The resource name on cloud.
         :param content_type: Optionally a Content-Type header.
+        :param content_disposition: Optionally a Content-Disposition header.
+            Download sets this to attachment so browsers save JSON and
+            GeoJSON instead of rendering them.
 
         :returns: Externally accessible URL or None.
         """
@@ -448,14 +473,20 @@ class ResourceCloudStorage(CloudStorage):
                 self.driver_options["key"], self.driver_options["secret"]
             )
 
+            signature_args = {
+                "container_name": self.container_name,
+                "blob_name": path,
+                "expiry": datetime.utcnow() + timedelta(seconds=config_secure_ttl()),
+                "permission": azure_blob.BlobPermissions.READ,
+            }
+            if content_disposition:
+                signature_args["content_disposition"] = content_disposition
+
             return blob_service.make_blob_url(
                 container_name=self.container_name,
                 blob_name=path,
                 sas_token=blob_service.generate_blob_shared_access_signature(
-                    container_name=self.container_name,
-                    blob_name=path,
-                    expiry=datetime.utcnow() + timedelta(seconds=config_secure_ttl()),
-                    permission=azure_blob.BlobPermissions.READ,
+                    **signature_args
                 ),
             )
         elif self.can_use_advanced_aws and self.use_secure_urls:
@@ -480,8 +511,17 @@ class ResourceCloudStorage(CloudStorage):
                 "key": path,
             }
 
+            response_headers = {}
             if content_type:
-                generate_url_params["response_headers"] = {"Content-Type": content_type}
+                response_headers["Content-Type"] = content_type
+            # SigV4 copies these keys into the query string unchanged.
+            # S3 only overrides the response for response-content-* names.
+            if content_disposition:
+                response_headers["response-content-disposition"] = (
+                    content_disposition
+                )
+            if response_headers:
+                generate_url_params["response_headers"] = response_headers
             return s3_connection.generate_url_sigv4(**generate_url_params)
 
         # Find the object for the given key.
